@@ -1,0 +1,84 @@
+<html>
+    <head>
+        <title>Web Bluetooth Secure DFU Loader</title>
+    </head>
+    <style>
+        label {
+            display: block;
+        }
+
+        #status-bar-container {
+            border: solid black 1px;
+            width: 400px;
+            height: 24px;
+        }
+
+        #status-bar {
+            background: blue;
+            width: 0%;
+            height: 100%;
+        }
+    </style>
+</html>
+<body>
+    <label>
+        Dat (init) file:
+        <input type="file" id="dat-file" />
+    </label>
+
+    <label>
+        Bin (firmware) file:
+        <input type="file" id="bin-file" />
+    </label>
+
+    <button onclick="dfu()">DFU</button>
+    
+    <div>
+        Status: <span id="status-box">Ready</span>
+    </div>
+
+    <div id="status-bar-container"><div id="status-bar"></div></div>
+
+    <script src="https://unpkg.com/crc-32@1.0.1/crc32.js"></script>
+    <script src="secure-dfu.js"></script>
+    <script>
+        const statusBox = document.getElementById('status-box');
+        const datFile = document.getElementById('dat-file');
+        const binFile = document.getElementById('bin-file');
+        const statusBar = document.getElementById('status-bar');
+
+        function loadFileData(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function updateStatus(value) {
+            statusBox.innerText = value;
+        }
+
+        async function dfu() {
+            try {
+                const dfuLoader = new SecureDfuLoader(CRC32.buf);
+                statusBar.style.width = 0;
+                dfuLoader.onprogress = function({offset, total}) {
+                    updateStatus(`${offset}/${total} bytes written`);
+                    statusBar.style.width = offset / total * 100 + '%';
+                };
+                updateStatus('Connecting...');
+                await dfuLoader.connect();
+                updateStatus('Sending init packet...');
+                await dfuLoader.sendInitPacket(await loadFileData(datFile.files[0]));
+                updateStatus('Writing firmware data...');
+                await dfuLoader.sendFirmware(await loadFileData(binFile.files[0]));
+                updateStatus('Great success!');
+            } catch (e) {
+                console.error('DFU Failed', e);
+                updateStatus(`DFU failed: ${e}). Check console for details.`);
+            }
+        }
+    </script>
+</body>
